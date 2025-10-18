@@ -117,7 +117,7 @@ jobs:
       - name: Build with Nix (macOS)
         if: matrix.os == 'macos-latest'
         run: |
-          bash -l -c 'source /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh && nix build --extra-experimental-features nix-command .#defaultPackage.${{ matrix.system }}'
+          bash -l -c 'source /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh && nix build --extra-experimental-features "nix-command flakes" .#defaultPackage.${{ matrix.system }}'
 
       - name: Prepare artifact
         run: |
