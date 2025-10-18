@@ -20,6 +20,12 @@
       packages = forEachSystem (pkgs: {
         default = pkgs.callPackage ./invoice.nix { };
       });
+
+      defaultPackage = {
+        x86_64-linux = pkgsFor.x86_64-linux.callPackage ./invoice.nix { };
+        x86_64-darwin = pkgsFor.x86_64-darwin.callPackage ./invoice.nix { };
+      };
+
       devShells = forEachSystem (pkgs: {
         default = pkgs.mkShell {
           nativeBuildInputs = with pkgs; [

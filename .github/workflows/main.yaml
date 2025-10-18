@@ -80,43 +80,39 @@ jobs:
         run: echo "${TAGS}" | xargs -I {} cosign sign --yes {}@${DIGEST}
 
   native-build:
-    name: Native CLI Build
+    name: Native Nix Build
     runs-on: ${{ matrix.os }}
     needs: docker-build
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            system: x86_64-linux
+          - os: macos-latest
+            system: x86_64-darwin
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
+      - name: Install Nix
+        uses: cachix/install-nix-action@v22
 
-      - name: Build CLI
-        run: cargo build --release
+      - name: Build with Nix
+        run: nix build .#defaultPackage.${{ matrix.system }}
 
       - name: Prepare artifact
-        shell: bash
         run: |
-          mkdir dist
-          cp target/release/* dist/ || cp target/release/*.exe dist/
-          if [ "$RUNNER_OS" == "Windows" ]; then
-            powershell Compress-Archive -Path dist\* -DestinationPath dist\cli-${{ runner.os }}.zip
-          else
-            cd dist
-            zip cli-${{ runner.os }}.zip *
-          fi
+          mkdir -p dist
+          cp result/bin/* dist/
+          cd dist
+          zip cli-${{ matrix.system }}.zip *
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cli-${{ runner.os }}
-          path: dist/cli-${{ runner.os }}.zip
+          name: cli-${{ matrix.system }}
+          path: dist/cli-${{ matrix.system }}.zip
 
   release:
     name: Release CLI Artifacts
