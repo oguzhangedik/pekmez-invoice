@@ -1,0 +1,36 @@
+---
+author:
+  name: Sherlock Holmes
+  street: 221B Baker Street
+  zip: NW1 6XE
+  city: London
+  country: England
+  tax_nr: UK123456789
+recipient:
+  name: Professor John H. Moriarty
+  street: 12 King’s Court, Suite 3
+  zip: WC2E 5HT
+  city: London
+  country: England
+bank-account:
+  name: Sherlock Holmes
+  bank: Royal Bank of England
+  iban: GB29 WEST 1234 5698 7654 32
+  bic: RYLBNK
+tax: 0.21
+notes: "Please transfer the due amount to the following bank account within the next 14 days:"
+labels:
+  invoice: Invoice
+  pos: Pos.
+  description: Description
+  price: Price
+  subtotal: Subtotal
+  total: Total
+  tax: VAT
+  currency: €
+  recipient: Recipient
+  institution: Institution
+  iban: IBAN
+  bic: BIC
+  tax-number: TIN
+  closing-statement: "Best Regards,"
