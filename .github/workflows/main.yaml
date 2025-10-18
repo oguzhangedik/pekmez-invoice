@@ -106,8 +106,15 @@ jobs:
         run: |
           curl -L https://nixos.org/nix/install | sh
 
-      - name: Build with Nix
+      - name: Build with Nix (Linux)
+        if: matrix.os == 'ubuntu-latest'
         run: nix build .#defaultPackage.${{ matrix.system }}
+
+      - name: Build with Nix (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          source /Users/runner/.nix-profile/etc/profile.d/nix.sh
+          nix build .#defaultPackage.${{ matrix.system }}
 
       - name: Prepare artifact
         run: |
