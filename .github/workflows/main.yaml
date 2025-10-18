@@ -95,10 +95,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Nix
-        uses: nix-actions/setup-nix@v20
+      - name: Install Nix
+        uses: cachix/install-nix-action@v22
         with:
-          nix_version: "2.23.3"
+          nix_version: 2.23.3
 
       - name: Build with Nix
         run: nix build .#defaultPackage.${{ matrix.system }}
