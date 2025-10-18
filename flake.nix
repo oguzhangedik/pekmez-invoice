@@ -24,6 +24,7 @@
       defaultPackage = {
         x86_64-linux = pkgsFor.x86_64-linux.callPackage ./invoice.nix { };
         x86_64-darwin = pkgsFor.x86_64-darwin.callPackage ./invoice.nix { };
+        x86_64-windows = pkgsFor.x86_64-windows.callPackage ./invoice.nix { };
       };
 
       devShells = forEachSystem (pkgs: {
