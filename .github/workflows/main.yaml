@@ -121,12 +121,28 @@ jobs:
         run: |
           bash -l -c 'source /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh && nix build --extra-experimental-features "nix-command flakes" .#defaultPackage.${{ matrix.system }}'
 
-      - name: Prepare artifact
+      - name: Build with Nix (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          nix build .#defaultPackage.${{ matrix.system }} --print-out-paths > path.txt
+
+      - name: Prepare artifact (Linux/macOS)
+        if: matrix.os != 'windows-latest'
         run: |
           mkdir -p dist
           cp result/bin/* dist/
           cd dist
           zip cli-${{ matrix.system }}.zip *
+
+      - name: Prepare artifact (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $path = Get-Content path.txt | Select-Object -First 1
+          New-Item -ItemType Directory -Path dist | Out-Null
+          Copy-Item "$path\bin\*" dist\
+          Compress-Archive -Path dist\* -DestinationPath "cli-${{ matrix.system }}.zip"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
