@@ -1,37 +1,51 @@
 {
   description = "Pekmez invoice maker";
+
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs?ref=nixos-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     systems.url = "github:nix-systems/default";
   };
 
-  outputs =
-    {
-      nixpkgs,
-      systems,
-      ...
-    }:
+  outputs = { nixpkgs, systems, ... }:
     let
       inherit (nixpkgs) lib;
-      pkgsFor = lib.genAttrs (import systems) (system: import nixpkgs { inherit system; });
-      forEachSystem = f: lib.genAttrs (import systems) (system: f pkgsFor.${system});
+      supportedSystems = import systems;
+
+      forAllSystems = f:
+        lib.genAttrs supportedSystems (system:
+          f {
+            pkgs = import nixpkgs { inherit system; };
+          });
+
+      pkgsFor = lib.genAttrs supportedSystems (system:
+        import nixpkgs { inherit system; });
+
+      # Windows cross-compilation (from Linux)
+      windowsCrossPkgs = import nixpkgs {
+        system = "x86_64-linux";
+        crossSystem = {
+          config = "x86_64-w64-mingw32";
+          system = "x86_64-windows";
+        };
+      };
+
     in
     {
-      packages = forEachSystem (pkgs: {
+      packages = forAllSystems ({ pkgs }: {
         default = pkgs.callPackage ./invoice.nix { };
-      });
+      }) // {
+        x86_64-windows = windowsCrossPkgs.callPackage ./invoice.nix { };
+      };
 
       defaultPackage = {
         x86_64-linux = pkgsFor.x86_64-linux.callPackage ./invoice.nix { };
         x86_64-darwin = pkgsFor.x86_64-darwin.callPackage ./invoice.nix { };
-        x86_64-windows = pkgsFor.x86_64-windows.callPackage ./invoice.nix { };
+        x86_64-windows = windowsCrossPkgs.callPackage ./invoice.nix { };
       };
 
-      devShells = forEachSystem (pkgs: {
+      devShells = forAllSystems ({ pkgs }: {
         default = pkgs.mkShell {
-          nativeBuildInputs = with pkgs; [
-            typst
-          ];
+          nativeBuildInputs = with pkgs; [ typst ];
         };
       });
     };

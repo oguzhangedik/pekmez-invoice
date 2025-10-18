@@ -90,8 +90,6 @@ jobs:
             system: x86_64-linux
           - os: macos-latest
             system: x86_64-darwin
-          - os: windows-latest
-            system: x86_64-windows
 
     steps:
       - name: Checkout repository
@@ -112,37 +110,15 @@ jobs:
         if: matrix.os == 'macos-latest'
         run: ls -l /nix/var/nix/profiles/default/etc/profile.d/
 
-      - name: Build with Nix (Linux)
-        if: matrix.os == 'ubuntu-latest'
+      - name: Build with Nix
         run: nix build .#defaultPackage.${{ matrix.system }}
 
-      - name: Build with Nix (macOS)
-        if: matrix.os == 'macos-latest'
-        run: |
-          bash -l -c 'source /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh && nix build --extra-experimental-features "nix-command flakes" .#defaultPackage.${{ matrix.system }}'
-
-      - name: Build with Nix (Windows)
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
-        run: |
-          nix build .#defaultPackage.${{ matrix.system }} --print-out-paths > path.txt
-
-      - name: Prepare artifact (Linux/macOS)
-        if: matrix.os != 'windows-latest'
+      - name: Prepare artifact
         run: |
           mkdir -p dist
           cp result/bin/* dist/
           cd dist
           zip cli-${{ matrix.system }}.zip *
-
-      - name: Prepare artifact (Windows)
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
-        run: |
-          $path = Get-Content path.txt | Select-Object -First 1
-          New-Item -ItemType Directory -Path dist | Out-Null
-          Copy-Item "$path\bin\*" dist\
-          Compress-Archive -Path dist\* -DestinationPath "cli-${{ matrix.system }}.zip"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -150,9 +126,40 @@ jobs:
           name: cli-${{ matrix.system }}
           path: dist/cli-${{ matrix.system }}.zip
 
+  cross-compile-windows:
+    name: Cross-Compile Windows Binary
+    runs-on: ubuntu-latest
+    needs: docker-build
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v25
+        with:
+          nix_version: "2.23.3"
+
+      - name: Cross-compile Windows binary
+        run: nix build .#defaultPackage.x86_64-windows --print-out-paths > path.txt
+
+      - name: Prepare artifact
+        run: |
+          path=$(cat path.txt | head -n1)
+          mkdir -p dist
+          cp "$path/bin/"* dist/
+          cd dist
+          zip cli-x86_64-windows.zip *
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-x86_64-windows
+          path: dist/cli-x86_64-windows.zip
+
   release:
     name: Release CLI Artifacts
-    needs: native-build
+    needs: [native-build, cross-compile-windows]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     steps:

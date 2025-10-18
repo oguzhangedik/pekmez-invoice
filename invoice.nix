@@ -4,50 +4,95 @@ let
   isWindows = builtins.match ".*-windows" stdenv.hostPlatform.system != null;
 
   program = if isWindows then
-    writeShellApplication {
-      name = "pekmez-invoice.exe";
-      runtimeInputs = with pkgs; [
-        typst
-        # windows uyumlu diğer araçlar gerekirse eklenir
-      ];
+    pkgs.writeShellApplication {
+      name = "pekmez-invoice.ps1";
+      runtimeInputs = with pkgs; [ typst ];
 
       text = ''
         param (
-          [string] $date,
-          [string] $number,
+          [string] $date = "",
+          [string] $number = "",
           [string] $output = "invoice.pdf",
-          [string] $config = (Join-Path $Env:XDG_CONFIG_HOME "pekmez-invoice\\details.yaml"),
+          [string] $config = "$Env:XDG_CONFIG_HOME\\pekmez-invoice\\details.yaml",
           [array] $items = @()
         )
 
-        if (-not $date) {
-          Write-Error "Missing required argument: --date"
-          exit 1
-        }
-        if (-not $number) {
-          Write-Error "Missing required argument: --number"
-          exit 1
-        }
-        if ($items.Count -eq 0) {
-          Write-Error "Missing required command: item"
+        function Show-Usage {
+          Write-Host "Usage: pekmez-invoice.ps1 --date <date> --number <number> [--output <file>] [--config <file>] item --desc <desc> --price <price>"
           exit 1
         }
 
-        $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+        # Parse args manually for 'item' entries and parameters
+        $parsedArgs = @{ date=""; number=""; output="invoice.pdf"; config="$Env:XDG_CONFIG_HOME\\pekmez-invoice\\details.yaml"; items = @() }
+
+        $i = 0
+        while ($i -lt $args.Count) {
+          switch ($args[$i]) {
+            '--date' { $i++; $parsedArgs.date = $args[$i] }
+            '--number' { $i++; $parsedArgs.number = $args[$i] }
+            '--output' { $i++; $parsedArgs.output = $args[$i] }
+            '--config' { $i++; $parsedArgs.config = $args[$i] }
+            'item' {
+              $i++
+              $desc = ""
+              $price = ""
+
+              while ($i -lt $args.Count) {
+                switch ($args[$i]) {
+                  '--desc' { $i++; $desc = $args[$i] }
+                  '--price' { $i++; $price = $args[$i] }
+                  default { break }
+                }
+                $i++
+              }
+
+              if ([string]::IsNullOrEmpty($desc) -or [string]::IsNullOrEmpty($price)) {
+                Write-Error "item requires --desc and --price"
+                exit 1
+              }
+
+              $itemObj = @{ description = $desc; price = $price }
+              $parsedArgs.items += $itemObj
+              continue
+            }
+            default {
+              Write-Error "Unknown argument: $($args[$i])"
+              Show-Usage
+            }
+          }
+          $i++
+        }
+
+        if ([string]::IsNullOrEmpty($parsedArgs.date)) {
+          Write-Error "Missing --date"
+          Show-Usage
+        }
+        if ([string]::IsNullOrEmpty($parsedArgs.number)) {
+          Write-Error "Missing --number"
+          Show-Usage
+        }
+        if ($parsedArgs.items.Count -eq 0) {
+          Write-Error "Missing items"
+          Show-Usage
+        }
+
+        $itemsJson = $parsedArgs.items | ConvertTo-Json -Depth 5
+
+        $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
         typst compile `
           --root / `
-          --input config=$(Resolve-Path $config) `
-          --input date=$date `
-          --input number=$number `
-          --input items=$(ConvertTo-Json $items) `
-          "$scriptDir\\..\\lib\\template.typ" $output
+          --input config="$(Resolve-Path $parsedArgs.config)" `
+          --input date="$($parsedArgs.date)" `
+          --input number="$($parsedArgs.number)" `
+          --input items="$itemsJson" `
+          "$scriptDir\..\lib\template.typ" "$parsedArgs.output"
       '';
     }
   else
     writeShellApplication {
       name = "pekmez-invoice";
-      runtimeInputs = with pkgs; [ typst coreutils ];
+      runtimeInputs = with pkgs; [ typst jq coreutils ];
 
       text = ''
         declare -A args=(
@@ -60,93 +105,48 @@ let
 
         while [[ $# -gt 0 ]]; do
           case "$1" in
-            --date|-d)
-              args["date"]="$2"
-              shift 2
-              ;;
-            --number|-n)
-              args["number"]="$2"
-              shift 2
-              ;;
-            --output|-o)
-              args["output"]="$2"
-              shift 2
-              ;;
-            --config|-c)
-              args["config"]="$2"
-              shift 2
-              ;;
+            --date|-d) args["date"]="$2"; shift 2 ;;
+            --number|-n) args["number"]="$2"; shift 2 ;;
+            --output|-o) args["output"]="$2"; shift 2 ;;
+            --config|-c) args["config"]="$2"; shift 2 ;;
             item)
-              shift 1
-
-              declare -A item_args=(
-                ["desc"]=""
-                ["price"]=""
-              )
-
+              shift
+              declare -A item_args=( ["desc"]="" ["price"]="" )
               while [[ $# -gt 0 && $1 =~ --desc|-d|--price|-p ]]; do
                 case "$1" in
-                  --desc|-l)
-                    item_args["desc"]="$2"
-                    shift 2
-                    ;;
-                  --price|-p)
-                    item_args["price"]="$2"
-                    shift 2
-                    ;;
-                  *)
-                    break
-                    ;;
+                  --desc|-l) item_args["desc"]="$2"; shift 2 ;;
+                  --price|-p) item_args["price"]="$2"; shift 2 ;;
+                  *) break ;;
                 esac
               done
-
-              if [[ -z "''${item_args["desc"]}" ]]; then
-                echo "Missing required argument: --desc"
-                exit 1
-              elif [[ -z "''${item_args["price"]}" ]]; then
-                echo "Missing required argument: --price"
-                exit 1
-              fi
 
               item_json=$(jq --null-input \
                 --arg desc "''${item_args["desc"]}" \
                 --arg price "''${item_args["price"]}" \
                 '{"description": $desc, "price": $price}')
 
-              args["items"]=$(echo "''${args["items"]}" | jq \
-                --argjson item "$item_json" \
-                '. + [$item]')
+              args["items"]=$(echo "''${args["items"]}" | jq --argjson item "$item_json" '. + [$item]')
               ;;
-            *)
-              echo "$@"
-              echo "Unknown option: $1"
-              exit 1
-              ;;
+            *) echo "Unknown option: $1"; exit 1 ;;
           esac
         done
 
-        if [[ -z "''${args["date"]}" ]]; then
-          echo "Missing required argument: --date"
-          exit 1
-        elif [[ -z "''${args["number"]}" ]]; then
-          echo "Missing required argument: --number"
-          exit 1
-        elif [[ "''${args["items"]}" = [] ]]; then
-          echo "Missing required command: item"
-          exit 1
-        fi
+        [[ -z "''${args["date"]}" ]] && echo "Missing --date" && exit 1
+        [[ -z "''${args["number"]}" ]] && echo "Missing --number" && exit 1
+        [[ "''${args["items"]}" == "[]" ]] && echo "Missing items" && exit 1
 
         SCRIPT_DIR=$(cd -- "$(dirname -- "''${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 
         typst compile \
-            --root / \
-            --input config="$(realpath "''${args["config"]}")" \
-            --input date="''${args["date"]}" \
-            --input number="''${args["number"]}" \
-            --input items="''${args["items"]}" \
-            "$SCRIPT_DIR/../lib/template.typ" "''${args["output"]}"
+          --root / \
+          --input config="$(realpath "''${args["config"]}")" \
+          --input date="''${args["date"]}" \
+          --input number="''${args["number"]}" \
+          --input items="''${args["items"]}" \
+          "$SCRIPT_DIR/../lib/template.typ" "''${args["output"]}"
       '';
     };
+
 in
 stdenv.mkDerivation (final: {
   pname = "pekmez-invoice";
