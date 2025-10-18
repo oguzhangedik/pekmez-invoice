@@ -104,8 +104,6 @@ jobs:
       - name: Install Nix on macOS
         if: matrix.os == 'macos-latest'
         uses: cachix/install-nix-action@v25
-        with:
-          install_options: '--no-daemon'
 
       - name: Build with Nix
         run: nix build .#defaultPackage.${{ matrix.system }}
