@@ -95,10 +95,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Nix
+      - name: Install Nix on Linux
+        if: matrix.os == 'ubuntu-latest'
         uses: cachix/install-nix-action@v25
         with:
           nix_version: "2.23.3"
+
+      - name: Install Nix on macOS
+        if: matrix.os == 'macos-latest'
+        uses: cachix/install-nix-action@v25
+        with:
+          install_options: '--no-daemon'
 
       - name: Build with Nix
         run: nix build .#defaultPackage.${{ matrix.system }}
